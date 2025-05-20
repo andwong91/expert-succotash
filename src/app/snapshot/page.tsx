@@ -1,4 +1,5 @@
 'use client';
+import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { SubmitHandler, useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -30,30 +31,51 @@ const Snapshot = () => {
 		value: 14,
 		duration: Duration.DAYS,
 	});
-	const [isLoading, setIsLoading] = useState(false);
-	const [snapshotsAreLocked, setSnapshotsAreLocked] = useState(false);
-	const [snapshotHour, setSnapshotHour] = useState(0);
-	const [snapshotMinute, setSnapshotMinute] = useState(0);
+	const [isLoading, setIsLoading] = useState<boolean>(false);
+	const [snapshotsAreLocked, setSnapshotsAreLocked] = useState<boolean>(false);
+	const [snapshotHour, setSnapshotHour] = useState<number>(0);
+	const [snapshotMinute, setSnapshotMinute] = useState<number>(0);
 	const [selectedDays, setSelectedDays] = useState<boolean[]>(
 		new Array(8).fill(false)
 	);
 
-	const { formState: { errors }, handleSubmit, register } = useForm<FormFields>();
+	const { formState: { errors }, handleSubmit, register, setValue } = useForm<FormFields>();
 
 	useEffect(() => {
-		const fetchSnapshots = async () => {
-			try {
-				// const response = await fetch('/api/snapshots');
-				// if (!response.ok) {
-				// 	throw new Error('Network response was not ok');
-				// }
-				// const data = await response.json();
-				// setSnapshots(data);
-			} catch (error) {
-				console.error('Error fetching snapshots:', error);
-			}
+		const fetchSnapshotPolicy = async () => {
+			const {
+				data: { 
+					policyName,
+					policyIsEnabled,
+					directoryPath,
+					scheduleType,
+					deletionTimeframe,
+					deletionFrequency,
+					snapshotsAreLocked,
+					snapshotHour,
+					snapshotMinute,
+					selectedDays
+				},
+			} = await axios.get('http://localhost:3333/snapshots');
+			setValue('policyName', policyName);
+			setValue('policyIsEnabled', policyIsEnabled);
+			setValue('directoryPath', directoryPath);
+			setValue('scheduleType', scheduleType);
+			setDeletionTimeframe(deletionTimeframe);
+			setDeletionFrequency(deletionFrequency);
+			setSnapshotsAreLocked(snapshotsAreLocked);
+			setSnapshotHour(snapshotHour);
+			setSnapshotMinute(snapshotMinute);
+			setSelectedDays(selectedDays);
 		};
-		fetchSnapshots();
+
+		setIsLoading(true);
+		try {
+			fetchSnapshotPolicy();
+		} catch (e) {
+			toast.error('Error fetching snapshot policy. Please try again later.');
+		}
+		setIsLoading(false);
 	}, []);
 
 	const selectedDayOptions = [
@@ -73,20 +95,40 @@ const Snapshot = () => {
 	];
 
 	const onSubmit: SubmitHandler<FormFields> = async (data: FormFields) => {
-		console.log(data);
 		const atLeastOneDaySelected = selectedDays.some((day) => day);
 		if (!atLeastOneDaySelected && deletionTimeframe === Duration.AUTOMATICALLY) {
 			toast.error('Please select at least one day of the week for the snapshot schedule.');
 			return;
 		}
 		setIsLoading(true);
+		try {
+			await axios.patch('http://localhost:3333/snapshots/1', {
+				directoryPath: data.directoryPath,
+				deletionTimeframe,
+				deletionFrequency,
+				policyIsEnabled: data.policyIsEnabled,
+				policyName: data.policyName,
+				scheduleType: data.scheduleType,
+				snapshotsAreLocked,
+				snapshotHour,
+				snapshotMinute,
+				selectedDays,
+			});
+			toast.success('Snapshot policy updated successfully!');
+		} catch (error) {
+			toast.error('Error updating snapshot policy. Please try again later.');
+		}
 		setIsLoading(false);
-		toast.success('Snapshot policy updated successfully!');
 	};
 	
 	return (
 		<div className="bg-graphics p-4 w-full">
 			<h1 className="text-2xl mb-4">Edit Snapshot Policy</h1>
+			{isLoading && (
+				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+					<div className="text-white text-xl">Loading...</div>
+				</div>
+			)}
 			<div>
 				<form onSubmit={handleSubmit(onSubmit)}>
 					<div>
